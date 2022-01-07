@@ -1,0 +1,25 @@
+{
+  "name": "electool",
+  "version": "1.0.0",
+  "description": "Tools for Electron based apps",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "node build.js"
+  },
+  "bin": {
+    "electool": "index.js"
+  },
+  "type": "module",
+  "author": "zAlweNy26",
+  "license": "ISC",
+  "dependencies": {
+    "asar": "^3.1.0",
+    "commander": "^8.3.0",
+    "node-fetch": "^3.1.0",
+    "ws": "^8.4.0"
+  },
+  "devDependencies": {
+    "nexe": "^3.3.7"
+  }
+}
