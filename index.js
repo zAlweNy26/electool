@@ -7,8 +7,7 @@ const pjson = JSON.parse(fs.readFileSync("package.json"))
 
 const devToolsKeysScript = `document.addEventListener("keydown", function (e) {
     if (e.keyCode === 123) { // F12
-        alert("hello !")
-        //require("electron").remote.BrowserWindow.getFocusedWindow().webContents.toggleDevTools()
+        require("electron").remote.BrowserWindow.getFocusedWindow().webContents.toggleDevTools()
     } else if (e.keyCode === 116) { // F5
         location.reload()
         console.log("All scripts were removed because of reloading !")
@@ -20,6 +19,13 @@ function convertToInteger(value) {
     if (isNaN(parsedValue) || parsedValue < 0) 
         throw new commander.InvalidArgumentError('The inserted value is not a valid number.')
     return parsedValue
+}
+
+function formatBytes(bytes, dm = 2) {
+    if (bytes === 0) return '0 Bytes'
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return parseFloat((bytes / Math.pow(1024, i)).toFixed(Math.abs(dm))) + ' ' + sizes[i]
 }
 
 const program = new Command()
@@ -51,28 +57,31 @@ function checkArgs() {
             return false
         }
         fs.readdirSync(opts.scripts).forEach(file => {
+            let fileSize = fs.statSync(path.join(opts.scripts, file))
             let data = fs.readFileSync(path.join(opts.scripts, file), "utf-8")
-            scripts.push({ name: file, content: data })
+            scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
         })
     }
     if (opts.unpack != undefined) {
         let packed = fs.statSync(opts.unpack)
-        if (packed == null || !packed.isFile() || path.extname(opts.unpack) != ".asar") {
+        if (packed == null || !packed.isFile() || path.extname(opts.unpack) != ".asar")
             console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
-            return false
+        else {
+            asar.extractAll(opts.unpack, "./unpacked")
+            console.log(`\x1b[32mThe .asar file was unpacked successfully !\x1b[0m`)
         }
-        asar.extractAll(opts.unpack, "./unpacked")
-        console.log(`\x1b[32mThe .asar file was unpacked successfully !\x1b[0m`)
+        return false
     }
     if (opts.pack != undefined) {
         let unpacked = fs.statSync(opts.pack)
-        if (unpacked == null || !unpacked.isDirectory()) {
+        if (unpacked == null || !unpacked.isDirectory())
             console.log("\x1b[31mThe inserted directory path was not found or is not valid !\x1b[0m")
-            return false
-        }
-        asar.createPackage(opts.pack, "./app.asar")
+        else {
+            asar.createPackage(opts.pack, "./app.asar")
             .then(() => console.log(`\x1b[32mThe inserted folder was packed successfully !\x1b[0m`))
             .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
+        }
+        return false
     }
     return true
 }
@@ -89,7 +98,7 @@ async function startInject() {
             if (opts.browser) erd.start(`http://${erd.host}:${erd.port}/`)
             clearInterval(timer)
         }
-        let notws = ws.filter(x => !windowsVisited.includes(x.id))
+        let notws = ws.filter(x => !windowsVisited.includes(x.id) && x.title != "")
         notws.forEach(k => {
             try {
                 if (opts.devkeys) {
@@ -97,7 +106,7 @@ async function startInject() {
                     erd.eval(k.ws, devToolsKeysScript)
                 }
                 scripts.forEach(v => {
-                    console.log(`\x1b[32mInjecting ${v.name} into ${k.title} (${k.id})\x1b[0m`)
+                    console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
                     erd.eval(k.ws, v.content)
                 })
             } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
