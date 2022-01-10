@@ -28,90 +28,93 @@ function formatBytes(bytes, dm = 2) {
     return parseFloat((bytes / Math.pow(1024, i)).toFixed(Math.abs(dm))) + ' ' + sizes[i]
 }
 
-const program = new Command()
-    .usage('<app> [options]')
-    .description("Injects various things into the specified electron app")
-    .option('-p, --port <port>', 'launch with a specific port', convertToInteger)
-    .option('-t, --timeout <seconds>', 'time to wait before stop trying to inject', convertToInteger)
-    .option('-s, --scripts <folder>', 'add scripts to be injected into each window (render thread)')
-    .option('-d, --devkeys', 'enable hotkeys F12 (toggle developer tools) and F5 (refresh)')
-    .option('-b, --browser', 'launch devtools in default browser')
-    .option('-u, --unpack <file>', 'unpack the .asar file to get the source code of the app')
-    .option('-p, --pack <folder>', 'pack the inserted folder into .asar file')
-    .version(`v${pjson.version} by zAlweNy26`, '-v, --version', 'output the current version of the program')
-    .parse(process.argv)
-
-const opts = program.opts()
 var scripts = []
 
-function checkArgs() {
-    let app = fs.statSync(program.args[0])
-    if (app == null || !app.isFile() || path.extname(program.args[0]) != ".exe") {
-        console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
-        return false
-    }
-    if (opts.scripts != undefined) {
-        let folder = fs.statSync(opts.scripts)
-        if (folder == null || !folder.isDirectory()) {
-            console.log("\x1b[31mThe inserted directory path was not found or is not valid !\x1b[0m")
-            return false
-        }
-        fs.readdirSync(opts.scripts).forEach(file => {
-            let fileSize = fs.statSync(path.join(opts.scripts, file))
-            let data = fs.readFileSync(path.join(opts.scripts, file), "utf-8")
-            scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
-        })
-    }
-    if (opts.unpack != undefined) {
-        let packed = fs.statSync(opts.unpack)
-        if (packed == null || !packed.isFile() || path.extname(opts.unpack) != ".asar")
-            console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
-        else {
-            asar.extractAll(opts.unpack, "./unpacked")
-            console.log(`\x1b[32mThe .asar file was unpacked successfully !\x1b[0m`)
-        }
-        return false
-    }
-    if (opts.pack != undefined) {
-        let unpacked = fs.statSync(opts.pack)
-        if (unpacked == null || !unpacked.isDirectory())
-            console.log("\x1b[31mThe inserted directory path was not found or is not valid !\x1b[0m")
-        else {
-            asar.createPackage(opts.pack, "./app.asar")
-            .then(() => console.log(`\x1b[32mThe inserted folder was packed successfully !\x1b[0m`))
-            .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
-        }
-        return false
-    }
-    return true
-}
-
-async function startInject() {
-    let timeout = opts.timeout == undefined ? 5 : opts.timeout
-    let erd = new ElectronRemoteDebugger("localhost", opts.port)
-    await erd.execute(program.args[0], timeout)
-    let windowsVisited = []
-    console.log(`\x1b[33mSearching for ${timeout} seconds...\x1b[0m`)
-    let timer = setInterval(async () => {
-        let ws = await erd.windows()
-        if (--timeout == 0 || ws.every(cv => windowsVisited.includes(cv.id))) {
-            if (opts.browser) erd.start(`http://${erd.host}:${erd.port}/`)
-            clearInterval(timer)
-        }
-        let notws = ws.filter(x => !windowsVisited.includes(x.id) && x.title != "")
-        notws.forEach(k => {
-            try {
-                if (opts.devkeys) {
-                    console.log(`\x1b[32mInjecting hotkeys script into ${k.title} (${k.id})\x1b[0m`)
-                    erd.eval(k.ws, devToolsKeysScript)
-                }
-                scripts.forEach(v => {
-                    console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
-                    erd.eval(k.ws, v.content)
+const program = new Command()
+    .version(`v${pjson.version} by zAlweNy26`, '-v, --version', 'Output the current version of the program')
+    .configureOutput({ outputError: (str, write) => write(`\x1b[31m${str}\x1b[0m`) })
+    
+program.command("debug <app>", { isDefault: true })
+    .description("Injects various things into the specified electron app\nIf --devkeys doesn't work, try pressing CTRL + SHIFT + I")
+    .option('-p, --port <port>', 'Launch with a specific port', convertToInteger)
+    .option('-t, --timeout <seconds>', 'Time to wait before stop trying to inject', convertToInteger)
+    .option('-s, --scripts <folder>', 'Add scripts to be injected into each window (render thread)')
+    .option('-d, --devkeys', 'Enable hotkeys F12 (toggle developer tools) and F5 (refresh)')
+    .option('-b, --browser', 'Launch devtools in default browser')
+    .action(async (app, options) => {
+        try {
+            let fl = fs.statSync(app)
+            if (fl == null || !fl.isFile() || path.extname(app) != ".exe") throw new Error()
+            if (options.scripts != undefined) {
+                let folder = fs.statSync(options.scripts)
+                if (folder == null || !folder.isDirectory()) throw new Error()
+                fs.readdirSync(options.scripts).forEach(file => {
+                    let fileSize = fs.statSync(path.join(options.scripts, file))
+                    let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
+                    scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
                 })
-            } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
-        })
-    }, 1000)
-}
+            }
+            let timeout = options.timeout == undefined ? 5 : options.timeout
+            let erd = new ElectronRemoteDebugger("localhost", options.port)
+            await erd.execute(app, timeout)
+            let windowsVisited = []
+            console.log(`\x1b[33mSearching for ${timeout} seconds...\x1b[0m`)
+            let timer = setInterval(async () => {
+                let ws = await erd.windows()
+                if (--timeout == 0 || ws.every(cv => windowsVisited.includes(cv.id))) {
+                    if (options.browser) erd.start(`http://${erd.host}:${erd.port}/`)
+                    clearInterval(timer)
+                }
+                let notws = ws.filter(x => !windowsVisited.includes(x.id) && x.title != "")
+                notws.forEach(k => {
+                    try {
+                        if (options.devkeys) {
+                            console.log(`\x1b[32mInjecting hotkeys script into ${k.title} (${k.id})\x1b[0m`)
+                            erd.eval(k.ws, devToolsKeysScript)
+                        }
+                        scripts.forEach(v => {
+                            console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
+                            erd.eval(k.ws, v.content)
+                        })
+                    } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
+                })
+            }, 1000)
+        } catch (error) {
+            console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
+        }
+    })
 
-if (checkArgs()) startInject()
+program.command("pack <folder>")
+    .description('Unpack the .asar file to get the source code of the app')
+    .action(fdr => {
+        try {
+            let unpacked = fs.statSync(fdr)
+            if (unpacked == null || !unpacked.isDirectory()) throw new Error()
+            else {
+                console.log(`\x1b[33mStarted packing the folder...\x1b[0m`)
+                asar.createPackage(fdr, "./app.asar")
+                .then(() => console.log(`\x1b[32mThe inserted folder was packed successfully !\x1b[0m`))
+                .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
+            }
+        } catch (error) {
+            console.log("\x1b[31mThe inserted directory path was not found or is not valid !\x1b[0m")
+        }
+    })
+
+program.command("unpack <file>")
+    .description('Pack the inserted folder into .asar file')
+    .action(fl => {
+        try {
+            let packed = fs.statSync(fl)
+            if (packed == null || !packed.isFile() || path.extname(fl) != ".asar") throw new Error()
+            else {
+                console.log(`\x1b[33mStarted unpacking the .asar file...\x1b[0m`)
+                asar.extractAll(fl, "./unpacked")
+                console.log(`\x1b[32mThe .asar file was unpacked successfully !\x1b[0m`)
+            }
+        } catch (error) {
+            console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
+        }
+    })
+
+program.parse(process.argv)
