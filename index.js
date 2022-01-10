@@ -85,30 +85,31 @@ program.command("debug <app>", { isDefault: true })
         try {
             let fl = fs.statSync(app)
             if (fl == null || !fl.isFile() || path.extname(app) != ".exe") throw new Error()
-            if (options.scripts != undefined) {
-                let folder = fs.statSync(options.scripts)
-                if (folder == null || !folder.isDirectory()) throw new Error("folder")
-                fs.readdirSync(options.scripts).forEach(file => {
-                    let fileSize = fs.statSync(path.join(options.scripts, file))
-                    let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
-                    if (path.extname(file) == ".js") scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
-                    else if (path.extname(file) == ".css") styles.push({ name: file, content: data, size: formatBytes(fileSize.size)})
-                })
-            }
-            console.log(`\x1b[33mSearching the process...\x1b[0m`)
-            ps.lookup({ command: path.basename(app), psargs: 'ux' }, (err, resultList) => {
-                if (err) throw new Error("process")
-                if (resultList.length) {
-                    ps.kill(resultList[0].pid, { signal: 'SIGTERM' }, err => {
-                        if (err) throw new Error("kill")
-                        else startInjecting(app, options)
+            try {
+                if (options.scripts != undefined) {
+                    let folder = fs.statSync(options.scripts)
+                    if (folder == null || !folder.isDirectory()) throw new Error()
+                    fs.readdirSync(options.scripts).forEach(file => {
+                        let fileSize = fs.statSync(path.join(options.scripts, file))
+                        let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
+                        if (path.extname(file) == ".js") scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
+                        else if (path.extname(file) == ".css") styles.push({ name: file, content: data, size: formatBytes(fileSize.size)})
                     })
-                } else startInjecting(app, options)
-            })
+                }
+                console.log(`\x1b[33mSearching the process...\x1b[0m`)
+                ps.lookup({ command: path.basename(app), psargs: 'ux' }, (err, resultList) => {
+                    if (err) throw new Error("process")
+                    if (resultList.length) {
+                        ps.kill(resultList[0].pid, { signal: 'SIGTERM' }, err => {
+                            if (err) throw new Error("kill")
+                            else startInjecting(app, options)
+                        })
+                    } else startInjecting(app, options)
+                })
+            } catch (err) { console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m") }
         } catch (error) {
             if (error.message == "process") console.log("\x1b[31mUnable to find this process.\x1b[0m")
             else if (error.message == "kill") console.log("\x1b[31mUnable to kill this process. Pleae close it manually.\x1b[0m")
-            else if (error.message == "folder") console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m")
             else console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
         }
     })
@@ -128,9 +129,7 @@ program.command("pack <folder>")
                 })
                 .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
             }
-        } catch (error) {
-            console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m")
-        }
+        } catch (error) { console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m") }
     })
 
 program.command("unpack <file>")
@@ -144,9 +143,7 @@ program.command("unpack <file>")
                 asar.extractAll(fl, "./unpacked")
                 console.log(`\x1b[32mThe .asar file was unpacked successfully !\x1b[0m`)
             }
-        } catch (error) {
-            console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
-        }
+        } catch (error) { console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m") }
     })
 
 program.parse(process.argv)
