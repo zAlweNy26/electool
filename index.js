@@ -1,6 +1,7 @@
 import fs from "fs"
 import path from "path"
 import asar from "asar"
+import ps from "ps-node"
 import commander, { Command } from "commander"
 import ElectronRemoteDebugger from "./debugger.js"
 const pjson = JSON.parse(fs.readFileSync("package.json"))
@@ -13,6 +14,8 @@ const devToolsKeysScript = `document.addEventListener("keydown", function (e) {
         console.log("All scripts were removed because of reloading !")
     }
 })`
+
+var scripts = []
 
 function convertToInteger(value) {
     const parsedValue = parseInt(value, 10)
@@ -28,7 +31,33 @@ function formatBytes(bytes, dm = 2) {
     return parseFloat((bytes / Math.pow(1024, i)).toFixed(Math.abs(dm))) + ' ' + sizes[i]
 }
 
-var scripts = []
+async function startInjecting(app, options) {
+    let timeout = options.timeout == undefined ? 5 : options.timeout
+    let erd = new ElectronRemoteDebugger("localhost", options.port)
+    await erd.execute(app, timeout)
+    let windowsVisited = []
+    console.log(`\x1b[33mSearching for ${timeout} seconds...\x1b[0m`)
+    let timer = setInterval(async () => {
+        let ws = await erd.windows()
+        if (--timeout == 0 || ws.every(cv => windowsVisited.includes(cv.id))) {
+            if (options.browser) erd.start(`http://${erd.host}:${erd.port}/`)
+            clearInterval(timer)
+        }
+        let notws = ws.filter(x => !windowsVisited.includes(x.id) && x.title != "")
+        notws.forEach(k => {
+            try {
+                if (options.devkeys) {
+                    console.log(`\x1b[32mInjecting hotkeys script into ${k.title} (${k.id})\x1b[0m`)
+                    erd.eval(k.ws, devToolsKeysScript)
+                }
+                scripts.forEach(v => {
+                    console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
+                    erd.eval(k.ws, v.content)
+                })
+            } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
+        })
+    }, 1000)
+}
 
 const program = new Command()
     .version(`v${pjson.version} by zAlweNy26`, '-v, --version', 'Output the current version of the program')
@@ -41,46 +70,33 @@ program.command("debug <app>", { isDefault: true })
     .option('-s, --scripts <folder>', 'Add scripts to be injected into each window (render thread)')
     .option('-d, --devkeys', 'Enable hotkeys F12 (toggle developer tools) and F5 (refresh)')
     .option('-b, --browser', 'Launch devtools in default browser')
-    .action(async (app, options) => {
+    .action((app, options) => {
         try {
             let fl = fs.statSync(app)
             if (fl == null || !fl.isFile() || path.extname(app) != ".exe") throw new Error()
             if (options.scripts != undefined) {
                 let folder = fs.statSync(options.scripts)
-                if (folder == null || !folder.isDirectory()) throw new Error()
+                if (folder == null || !folder.isDirectory()) throw new Error("folder")
                 fs.readdirSync(options.scripts).forEach(file => {
                     let fileSize = fs.statSync(path.join(options.scripts, file))
                     let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
                     scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
                 })
             }
-            let timeout = options.timeout == undefined ? 5 : options.timeout
-            let erd = new ElectronRemoteDebugger("localhost", options.port)
-            await erd.execute(app, timeout)
-            let windowsVisited = []
-            console.log(`\x1b[33mSearching for ${timeout} seconds...\x1b[0m`)
-            let timer = setInterval(async () => {
-                let ws = await erd.windows()
-                if (--timeout == 0 || ws.every(cv => windowsVisited.includes(cv.id))) {
-                    if (options.browser) erd.start(`http://${erd.host}:${erd.port}/`)
-                    clearInterval(timer)
-                }
-                let notws = ws.filter(x => !windowsVisited.includes(x.id) && x.title != "")
-                notws.forEach(k => {
-                    try {
-                        if (options.devkeys) {
-                            console.log(`\x1b[32mInjecting hotkeys script into ${k.title} (${k.id})\x1b[0m`)
-                            erd.eval(k.ws, devToolsKeysScript)
-                        }
-                        scripts.forEach(v => {
-                            console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
-                            erd.eval(k.ws, v.content)
-                        })
-                    } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
-                })
-            }, 1000)
+            ps.lookup({ command: path.basename(app), psargs: 'ux' }, (err, resultList) => {
+                if (err) throw new Error("process")
+                if (resultList.length) {
+                    ps.kill(resultList[0].pid, { signal: 'SIGTERM' }, err => {
+                        if (err) throw new Error("kill")
+                        else startInjecting(app, options)
+                    })
+                } else startInjecting(app, options)
+            })
         } catch (error) {
-            console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
+            if (error.message == "process") console.log("\x1b[31mUnable to find this process.\x1b[0m")
+            else if (error.message == "kill") console.log("\x1b[31mUnable to kill this process. Pleae close it manually.\x1b[0m")
+            else if (error.message == "folder") console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m")
+            else console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
         }
     })
 
@@ -97,7 +113,7 @@ program.command("pack <folder>")
                 .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
             }
         } catch (error) {
-            console.log("\x1b[31mThe inserted directory path was not found or is not valid !\x1b[0m")
+            console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m")
         }
     })
 
