@@ -6,9 +6,10 @@ import commander, { Command } from "commander"
 import ElectronRemoteDebugger from "./debugger.js"
 const pjson = JSON.parse(fs.readFileSync("package.json"))
 
-const devToolsKeysScript = `document.addEventListener("keydown", function (e) {
+const devToolsKeysScript = `document.addEventListener("keydown", e => {
     if (e.keyCode === 123) { // F12
         require("electron").remote.BrowserWindow.getFocusedWindow().webContents.toggleDevTools()
+        console.log("DevTools enabled !")
     } else if (e.keyCode === 116) { // F5
         location.reload()
         console.log("All scripts were removed because of reloading !")
@@ -16,6 +17,7 @@ const devToolsKeysScript = `document.addEventListener("keydown", function (e) {
 })`
 
 var scripts = []
+var styles = []
 
 function convertToInteger(value) {
     const parsedValue = parseInt(value, 10)
@@ -51,8 +53,17 @@ async function startInjecting(app, options) {
                     erd.eval(k.ws, devToolsKeysScript)
                 }
                 scripts.forEach(v => {
-                    console.log(`\x1b[32mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
+                    console.log(`\x1b[36mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
                     erd.eval(k.ws, v.content)
+                })
+                styles.forEach(v => {
+                    console.log(`\x1b[35mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
+                    let cssInjectScript = `
+                        const customStyle = document.createElement('style')
+                        customStyle.textContent = \`\\n${v.content}\\n\`
+                        document.head.append(customStyle)
+                        console.log("Styles injected !")`
+                    erd.eval(k.ws, cssInjectScript)
                 })
             } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
         })
@@ -80,9 +91,11 @@ program.command("debug <app>", { isDefault: true })
                 fs.readdirSync(options.scripts).forEach(file => {
                     let fileSize = fs.statSync(path.join(options.scripts, file))
                     let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
-                    scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
+                    if (path.extname(file) == ".js") scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
+                    else if (path.extname(file) == ".css") styles.push({ name: file, content: data, size: formatBytes(fileSize.size)})
                 })
             }
+            console.log(`\x1b[33mSearching the process...\x1b[0m`)
             ps.lookup({ command: path.basename(app), psargs: 'ux' }, (err, resultList) => {
                 if (err) throw new Error("process")
                 if (resultList.length) {
@@ -101,7 +114,7 @@ program.command("debug <app>", { isDefault: true })
     })
 
 program.command("pack <folder>")
-    .description('Unpack the .asar file to get the source code of the app')
+.description('Pack the inserted folder into .asar file')
     .action(fdr => {
         try {
             let unpacked = fs.statSync(fdr)
@@ -109,7 +122,10 @@ program.command("pack <folder>")
             else {
                 console.log(`\x1b[33mStarted packing the folder...\x1b[0m`)
                 asar.createPackage(fdr, "./app.asar")
-                .then(() => console.log(`\x1b[32mThe inserted folder was packed successfully !\x1b[0m`))
+                .then(() => {
+                    console.log(`\x1b[32mThe inserted folder was packed successfully !\x1b[0m`)
+                    console.log(`\x1b[33mMake sure to create a backup of the original .asar file before replacing it !\x1b[0m`)
+                })
                 .catch(err => console.log(`\x1b[31mAn error as occurred while packing the folder !\x1b[0m`))
             }
         } catch (error) {
@@ -118,7 +134,7 @@ program.command("pack <folder>")
     })
 
 program.command("unpack <file>")
-    .description('Pack the inserted folder into .asar file')
+    .description('Unpack the .asar file to get the source code of the app')
     .action(fl => {
         try {
             let packed = fs.statSync(fl)

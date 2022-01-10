@@ -9,12 +9,12 @@ let platforms = [
     { platform: "Linux", target: "linux-x86-14.15.3" }
 ]
 
-platforms.forEach(async e => {
+platforms.forEach(e => {
     nexe.compile({
         input: pjson.main,
         build: false,
         output: path.join("dist", e.platform, pjson.name),
-        targets: [e.target]
+        targets: e.target
     }).then(() => {
         console.log(`\x1b[32m${e.platform} build compiled successfully !\x1b[0m`)
     }).catch(err => console.error(err))
