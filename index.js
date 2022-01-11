@@ -2,10 +2,9 @@ import fs from "fs"
 import path from "path"
 import asar from "asar"
 import ps from "ps-node"
-import { JSDOM } from "jsdom"
 import commander, { Command } from "commander"
 import ElectronRemoteDebugger from "./debugger.js"
-import { formatBytes, searchInDir } from "./functions.js";
+import { formatBytes, injectCSS, injectJS } from "./functions.js";
 const pjson = JSON.parse(fs.readFileSync("package.json"))
 
 const devToolsKeysScript = `document.addEventListener("keydown", e => {
@@ -118,34 +117,16 @@ program.command("debug <app>", { isDefault: true })
 
 program.command("pack <folder>")
     .description('Pack the inserted folder into .asar file')
-    .option('-c, --css <styles...>', 'Specify the .css files to link inside the packed .asar file')
+    .option('-s, --scripts <scripts...>', 'Specify the .js files to include inside the packed .asar file\nRemember : the order is important !')
+    .option('-c, --css <styles...>', 'Specify the .css files to link inside the packed .asar file\nRemember : the order is important !')
     .action((fdr, options) => {
         try {
             let unpacked = fs.statSync(fdr)
             if (unpacked == null || !unpacked.isDirectory()) throw new Error()
             else {
-                if (options.css != undefined) {
-                    try {
-                        searchInDir(fdr, /\.html$/, fn => {
-                            if (fn == null || fn == undefined) throw new Error("no file")
-                            let data = fs.readFileSync(fn, "utf-8")
-                            let dom = new JSDOM(`${data}`).window.document
-                            let head = dom.querySelector("head")
-                            if (!head) console.log("\x1b[31mUnable to locate HEAD tag in the HTML document !\x1b[0m")
-                            options.css.forEach(e => {
-                                if (!fs.existsSync(path.resolve(e))) console.log(`\x1b[33mThe file ${e} was not found so it was skipped.\x1b[0m`)
-                                else {
-                                    fs.copyFileSync(path.resolve(e), path.join(path.dirname(fn), path.basename(e)), fs.constants.COPYFILE_FICLONE)
-                                    head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${path.basename(e)}">`)
-                                }
-                            })
-                            fs.writeFileSync(fn, dom.documentElement.outerHTML)
-                            console.log(`\x1b[32m${path.basename(fn)} updated successfully !\x1b[0m`)
-                        })
-                    } catch (err) {
-                        console.log("\x1b[31mAn error has occurred while injecting css files !\x1b[0m")
-                    }
-                }
+                if (options.css != undefined) injectCSS(fdr, options.css)
+                if (options.scripts != undefined) injectJS(fdr, options.scripts)
+                console.log(`\x1b[32mEach .html file was updated successfully !\x1b[0m`)
                 console.log(`\x1b[33mStarted packing the folder...\x1b[0m`)
                 asar.createPackage(fdr, "./app.asar")
                 .then(() => {

@@ -76,4 +76,5 @@ typings/
 .fusebox/
 
 unpacked/
+dist/
 .asar
