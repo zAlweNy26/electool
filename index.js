@@ -126,9 +126,9 @@ program.command("pack <folder>")
                             let head = dom.querySelector("head")
                             if (!head) console.log("\x1b[31mUnable to locate HEAD tag in the HTML document !\x1b[0m")
                             options.css.forEach(e => {
-                                if (!fs.existsSync(e)) console.log(`\x1b[33mThe file ${e} was not found so it was skipped.\x1b[0m`)
+                                if (!fs.existsSync(path.resolve(e))) console.log(`\x1b[33mThe file ${e} was not found so it was skipped.\x1b[0m`)
                                 else {
-                                    fs.copyFileSync(e, path.join(path.dirname(fn), e), fs.constants.COPYFILE_FICLONE)
+                                    fs.copyFileSync(path.resolve(e), path.join(path.dirname(fn), path.basename(e)), fs.constants.COPYFILE_FICLONE)
                                     head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${e}">`)
                                 }
                             })
