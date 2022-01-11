@@ -129,7 +129,7 @@ program.command("pack <folder>")
                                 if (!fs.existsSync(path.resolve(e))) console.log(`\x1b[33mThe file ${e} was not found so it was skipped.\x1b[0m`)
                                 else {
                                     fs.copyFileSync(path.resolve(e), path.join(path.dirname(fn), path.basename(e)), fs.constants.COPYFILE_FICLONE)
-                                    head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${e}">`)
+                                    head.insertAdjacentHTML("beforeend", `<link rel="stylesheet" href="${path.basename(e)}">`)
                                 }
                             })
                             fs.writeFileSync(fn, dom.documentElement.outerHTML)
