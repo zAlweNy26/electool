@@ -53,11 +53,9 @@ async function startInjecting(app, options) {
                 })
                 styles.forEach(v => {
                     console.log(`\x1b[35mInjecting ${v.name} (${v.size}) into "${k.title}" (${k.id})\x1b[0m`)
-                    let cssInjectScript = `
-                        const customStyle = document.createElement('style')
+                    let cssInjectScript = `const customStyle = document.createElement('style')
                         customStyle.textContent = \`\\n${v.content}\\n\`
-                        document.head.append(customStyle)
-                        console.log("Styles injected !")`
+                        document.head.append(customStyle)`
                     erd.eval(k.ws, cssInjectScript)
                 })
             } catch (err) { console.error(err) } finally { windowsVisited.push(k.id) }
@@ -74,6 +72,7 @@ program.command("debug <app>", { isDefault: true })
     .option('-p, --port <port>', 'Launch with a specific port', convertToInteger)
     .option('-t, --timeout <seconds>', 'Time to wait before stop trying to inject', convertToInteger)
     .option('-s, --scripts <folder>', 'Add scripts to be injected into each window (render thread)')
+    .option('-c, --css <folder>', 'Add styles to be injected into each window (render thread)')
     .option('-d, --devkeys', 'Enable hotkeys F12 (toggle developer tools) and F5 (refresh)')
     .option('-b, --browser', 'Launch devtools in default browser')
     .action((app, options) => {
@@ -82,13 +81,21 @@ program.command("debug <app>", { isDefault: true })
             if (fl == null || !fl.isFile() || path.extname(app) != ".exe") throw new Error()
             try {
                 if (options.scripts != undefined) {
-                    let folder = fs.statSync(options.scripts)
+                    let folder = fs.statSync(path.resolve(options.scripts))
                     if (folder == null || !folder.isDirectory()) throw new Error()
-                    fs.readdirSync(options.scripts).forEach(file => {
-                        let fileSize = fs.statSync(path.join(options.scripts, file))
-                        let data = fs.readFileSync(path.join(options.scripts, file), "utf-8")
-                        if (path.extname(file) == ".js") scripts.push({ name: file, content: data, size: formatBytes(fileSize.size)})
-                        else if (path.extname(file) == ".css") styles.push({ name: file, content: data, size: formatBytes(fileSize.size)})
+                    fs.readdirSync(path.resolve(options.scripts)).forEach(file => {
+                        let stat = fs.statSync(path.join(path.resolve(options.scripts), file))
+                        let data = fs.readFileSync(path.join(path.resolve(options.scripts), file), "utf-8")
+                        if (path.extname(file) == ".js") scripts.push({ name: path.basename(file), content: data, size: formatBytes(stat.size)})
+                    })
+                }
+                if (options.css != undefined) {
+                    let folder = fs.statSync(path.resolve(options.css))
+                    if (folder == null || !folder.isDirectory()) throw new Error()
+                    fs.readdirSync(path.resolve(options.css)).forEach(file => {
+                        let stat = fs.statSync(path.join(path.resolve(options.css), file))
+                        let data = fs.readFileSync(path.join(path.resolve(options.css), file), "utf-8")
+                        if (path.extname(file) == ".css") styles.push({ name: path.basename(file), content: data, size: formatBytes(stat.size)})
                     })
                 }
                 console.log(`\x1b[33mSearching the process...\x1b[0m`)
