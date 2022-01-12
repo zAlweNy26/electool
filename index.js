@@ -129,7 +129,7 @@ program.command("pack <folder>")
             else {
                 if (options.css != undefined) injectCSS(fdr, options.css)
                 if (options.scripts != undefined) injectJS(fdr, options.scripts)
-                console.log(`\x1b[32mEach .html file was updated successfully !\x1b[0m`)
+                if (options.scripts != undefined || options.css != undefined) console.log(`\x1b[32mEach .html file was updated successfully !\x1b[0m`)
                 console.log(`\x1b[33mStarted packing the folder...\x1b[0m`)
                 asar.createPackage(fdr, "./app.asar")
                 .then(() => {
