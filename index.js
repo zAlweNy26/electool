@@ -103,7 +103,10 @@ program.command("debug <app>", { isDefault: true })
                     if (resultList.length) {
                         ps.kill(resultList[0].pid, { signal: 'SIGTERM' }, err => {
                             if (err) throw new Error("kill")
-                            else startInjecting(app, options)
+                            else {
+                                console.log(`\x1b[33mClosing the current process ${path.basename(app)} (${resultList[0].pid})...\x1b[0m`)
+                                startInjecting(app, options)
+                            }
                         })
                     } else startInjecting(app, options)
                 })
