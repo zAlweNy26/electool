@@ -81,7 +81,7 @@ program.command("debug <app>", { isDefault: true })
             try {
                 if (options.scripts != undefined) {
                     let folder = fs.statSync(path.resolve(options.scripts))
-                    if (folder == null || !folder.isDirectory()) throw new Error()
+                    if (folder == null || !folder.isDirectory()) throw "\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m"
                     fs.readdirSync(path.resolve(options.scripts)).forEach(file => {
                         let stat = fs.statSync(path.join(path.resolve(options.scripts), file))
                         let data = fs.readFileSync(path.join(path.resolve(options.scripts), file), "utf-8")
@@ -90,7 +90,7 @@ program.command("debug <app>", { isDefault: true })
                 }
                 if (options.css != undefined) {
                     let folder = fs.statSync(path.resolve(options.css))
-                    if (folder == null || !folder.isDirectory()) throw new Error()
+                    if (folder == null || !folder.isDirectory()) throw "\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m"
                     fs.readdirSync(path.resolve(options.css)).forEach(file => {
                         let stat = fs.statSync(path.join(path.resolve(options.css), file))
                         let data = fs.readFileSync(path.join(path.resolve(options.css), file), "utf-8")
@@ -99,10 +99,10 @@ program.command("debug <app>", { isDefault: true })
                 }
                 console.log(`\x1b[33mSearching the process...\x1b[0m`)
                 ps.lookup({ command: path.basename(app), psargs: 'ux' }, (err, resultList) => {
-                    if (err) throw new Error("process")
+                    if (err) throw "\x1b[31mUnable to find this process.\x1b[0m"
                     if (resultList.length) {
                         ps.kill(resultList[0].pid, { signal: 'SIGTERM' }, err => {
-                            if (err) throw new Error("kill")
+                            if (err) throw "\x1b[31mUnable to kill this process. Please close it manually.\x1b[0m"
                             else {
                                 console.log(`\x1b[33mClosing the current process ${path.basename(app)} (${resultList[0].pid})...\x1b[0m`)
                                 startInjecting(app, options)
@@ -110,12 +110,8 @@ program.command("debug <app>", { isDefault: true })
                         })
                     } else startInjecting(app, options)
                 })
-            } catch (err) { console.log("\x1b[31mThe inserted folder path was not found or is not valid !\x1b[0m") }
-        } catch (error) {
-            if (error.message == "process") console.log("\x1b[31mUnable to find this process.\x1b[0m")
-            else if (error.message == "kill") console.log("\x1b[31mUnable to kill this process. Pleae close it manually.\x1b[0m")
-            else console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m")
-        }
+            } catch (err) { console.log(err) }
+        } catch (error) { console.log("\x1b[31mThe inserted file path was not found or is not valid !\x1b[0m") }
     })
 
 program.command("pack <folder>")
